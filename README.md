@@ -24,14 +24,14 @@ Manual quality rating by radiologists is gold-standard but slow and subjective. 
 ## QEI Formula
 
 ```
-QEI = ∛( (1 - exp(-3·pss^2.4)) · exp(-(0.1·DI^0.9 + 2.8·nGMCBF^0.5)) )
+QEI = ∛( (1 - exp(-3·ρ_ss^2.4)) · exp(-(0.1·DI^0.9 + 2.8·p_nGMCBF^0.5)) )
 ```
 
-| Symbol | Component | What it catches |
-|--------|-----------|-----------------|
-| **pss** | Structural similarity | CBF should look like the brain — high in GM, low in WM. Low pss = spatial pattern destroyed by noise/artefacts |
-| **DI** | Index of dispersion | High variance across tissue = motion or incomplete labelling |
-| **nGMCBF** | Negative GM fraction | CBF is always positive physiologically — negatives are pure artefact |
+| Paper symbol | Code variable | Component | What it catches |
+|---|---|---|-----------------|
+| **ρ_ss** | `pss` | Structural similarity | Pearson correlation between CBF and pseudo-structural CBF. Low = spatial pattern destroyed by noise/artefacts |
+| **DI** | `di` | Index of dispersion | High variance across tissue = motion or incomplete labelling |
+| **p_nGMCBF** | `n_gm` | Negative GM fraction | CBF is always positive physiologically — negatives are pure artefact |
 
 QEI ranges from **0** (unusable) → **1** (excellent).
 
@@ -99,4 +99,3 @@ print(result)
 | QEI paper (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
 | ASL MRI overview | [ISMRM ASL Perfusion Study Group](https://www.ismrm.org/study-groups/perfusion/) |
 | ExploreASL QC toolbox | [ExploreASL on GitHub](https://github.com/ExploreASL/ExploreASL) |
-| AURA ASL dataset | [OpenNeuro AURA](https://openneuro.org/) |
