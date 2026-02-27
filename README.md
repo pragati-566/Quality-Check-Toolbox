@@ -1,33 +1,39 @@
 # Quality Check Toolbox v1.0
 
-**Proposed mentors:** Maria Mora, Sudipto Dolui  
-**Category:** Advanced · Python · GitHub · MRI Image Processing
+A Python demo of the **Quality Evaluation Index (QEI)** for Arterial Spin Labeling (ASL) Cerebral Blood Flow (CBF) maps.
+
+> *Automated Quality Evaluation Index for Arterial Spin Labeling Derived Cerebral Blood Flow Maps.*
+> Dolui et al., JMRI 2024. [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308)
 
 ---
 
-## What is this?
+## What is ASL and why does QC matter?
 
-A Python demo of the **Quality Evaluation Index (QEI)** for Arterial Spin Labeling (ASL) Cerebral Blood Flow (CBF) maps, as described in:
+**Arterial Spin Labeling (ASL)** is an MRI technique that measures cerebral blood flow (CBF) non-invasively by magnetically labelling water in blood as it enters the brain. It is widely used in studies of Alzheimer's disease, stroke, and other neurological conditions.
 
-> Dolui S, Wang Z, Wolf RL, et al.  
-> *Automated Quality Evaluation Index for Arterial Spin Labeling Derived Cerebral Blood Flow Maps.*  
-> JMRI 2024. [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308)
+ASL CBF maps are however prone to:
+- **Motion artefacts** — patient movement between label/control pairs
+- **Low SNR** — only ~1% of the signal comes from labelled blood
+- **Incomplete labelling** — when blood arrives late, CBF appears artificially low or negative
+- **Noise** — poor shimming, RF inhomogeneity
+
+Manual quality rating by radiologists is gold-standard but slow and subjective. **QEI automates this** with a single scalar score in [0, 1].
 
 ---
 
 ## QEI Formula
 
-$$
-\text{QEI} = \sqrt[3]{\;\bigl(1 - e^{-3\,p_{ss}^{2.4}}\bigr)\cdot e^{-(0.1\,\text{DI}^{0.9}\;+\;2.8\,n_{\text{GMCBF}}^{0.5})}\;}
-$$
+```
+QEI = ∛( (1 - exp(-3·pss^2.4)) · exp(-(0.1·DI^0.9 + 2.8·nGMCBF^0.5)) )
+```
 
-| Symbol | Component | Description |
-|--------|-----------|-------------|
-| **pss** | Structural similarity | Pearson correlation between CBF map and pseudo-structural CBF (weighted GM + WM probability maps) |
-| **DI** | Index of dispersion | Variance/mean of pooled tissue CBF, normalised by mean GM CBF — measures spatial variability |
-| **nGMCBF** | Negative GM fraction | Fraction of GM voxels with CBF < 0 (non-physiological artefacts) |
+| Symbol | Component | What it catches |
+|--------|-----------|-----------------|
+| **pss** | Structural similarity | CBF should look like the brain — high in GM, low in WM. Low pss = spatial pattern destroyed by noise/artefacts |
+| **DI** | Index of dispersion | High variance across tissue = motion or incomplete labelling |
+| **nGMCBF** | Negative GM fraction | CBF is always positive physiologically — negatives are pure artefact |
 
-QEI ranges from **0** (unusable) to **1** (excellent quality).
+QEI ranges from **0** (unusable) → **1** (excellent).
 
 ---
 
@@ -36,11 +42,10 @@ QEI ranges from **0** (unusable) to **1** (excellent quality).
 ```
 Quality-Check-Toolbox/
 ├── qc_toolbox/
-│   ├── __init__.py
-│   ├── qei.py            # Core QEI computation (all 3 formula components)
-│   ├── synthetic_data.py # Synthetic brain mask + CBF map generator
-│   └── visualize.py      # Plotting & console report
-├── demo.py               # Run the demo
+│   ├── qei.py         # Core QEI formula
+│   ├── synthetic.py   # Synthetic brain + CBF map generator
+│   └── visualize.py   # Plots & console report
+├── demo.py            # Run the demo
 ├── requirements.txt
 └── README.md
 ```
@@ -50,31 +55,48 @@ Quality-Check-Toolbox/
 ## Quick Start
 
 ```bash
-# 1. Clone / open the project
-cd Quality-Check-Toolbox
-
-# 2. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 3. Run the demo
+# Run the demo (generates synthetic data + QEI report)
 python demo.py
 ```
 
-### Expected output
+### What the demo does
+
+1. Builds a synthetic 3D brain (64×64×30 voxels) with GM / WM / CSF regions
+2. Generates three CBF maps — **Excellent**, **Average**, **Poor** — by adding increasing noise and artefacts
+3. Computes QEI for each and prints a results table
+4. Saves `qei_report.png` with CBF slices and a score bar chart
 
 ```
-  Quality Check Toolbox v1.0 — QEI Demo
-  Based on: Dolui et al. 2024, JMRI (doi:10.1002/jmri.29308)
-
-  ...
-
-────────────────────────────────────────────────────────────
-Case            QEI     pss      DI    neg GM  Grade
-────────────────────────────────────────────────────────────
-Excellent    0.8xxx  0.9xxx    x.xx    0.x%   Excellent
-Average      0.6xxx  0.7xxx    x.xx   10.x%   Average
-Poor         0.2xxx  0.4xxx   xx.xx   35.x%   Poor
-────────────────────────────────────────────────────────────
+Case        QEI     pss     DI    neg GM   Grade
+────────────────────────────────────────────────
+Excellent  ~0.85   ~0.93   ~1.2    1.0%   Excellent
+Average    ~0.60   ~0.72   ~4.5   10.0%   Average
+Poor       ~0.20   ~0.40  ~18.0   35.0%   Poor
 ```
 
-A **`qei_report.png`** is also saved, showing mid-axial CBF slices and a bar chart of scores.
+---
+
+## Use with your own data
+
+```python
+from qc_toolbox.qei import compute_qei
+
+# Load your arrays (e.g. from NIfTI via nibabel)
+result = compute_qei(cbf_map, gm_mask, wm_mask, csf_mask)
+print(result)
+# {'qei': 0.74, 'pss': 0.85, 'di': 3.2, 'n_gm': 0.04}
+```
+
+---
+
+## Learn more
+
+| Resource | Link |
+|----------|------|
+| QEI paper (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
+| ASL MRI overview | [ISMRM ASL Perfusion Study Group](https://www.ismrm.org/study-groups/perfusion/) |
+| ExploreASL QC toolbox | [ExploreASL on GitHub](https://github.com/ExploreASL/ExploreASL) |
+| AURA ASL dataset | [OpenNeuro AURA](https://openneuro.org/) |
