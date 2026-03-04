@@ -1,3 +1,14 @@
+# Core QC computations
 numpy
 scipy
 matplotlib
+
+# Real data I/O (BIDS NIfTI loading)
+nibabel
+
+# OpenNeuro S3 downloads
+boto3
+botocore
+
+# Progress bars
+tqdm

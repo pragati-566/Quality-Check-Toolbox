@@ -45,3 +45,6 @@ data/
 *.mat
 *.h5
 *.hdf5
+
+# Pipeline output
+qc_output/

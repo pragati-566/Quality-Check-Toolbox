@@ -1,6 +1,8 @@
 # Quality Check Toolbox v1.0
 
-A Python demo of the **Quality Evaluation Index (QEI)** for Arterial Spin Labeling (ASL) Cerebral Blood Flow (CBF) maps.
+A Python toolbox for **automated Quality Control (QC) of Arterial Spin Labeling (ASL) MRI data**, featuring a full real-data pipeline for BIDS-formatted datasets.
+
+*This project is developed as part of a GSoC proposal for Quality Check Toolbox v1.0.*
 
 > *Automated Quality Evaluation Index for Arterial Spin Labeling Derived Cerebral Blood Flow Maps.*
 > Dolui et al., JMRI 2024. [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308)
@@ -42,53 +44,73 @@ QEI ranges from **0** (unusable) → **1** (excellent).
 ```
 Quality-Check-Toolbox/
 ├── qc_toolbox/
-│   ├── qei.py         # Core QEI formula
-│   ├── synthetic.py   # Synthetic brain + CBF map generator
-│   └── visualize.py   # Plots & console report
-├── demo.py            # Run the demo
+│   ├── qei.py           # Core QEI formula (Dolui et al. 2024)
+│   ├── visualize.py     # Plots & console report
+│   ├── bids_loader.py   # BIDS-format ASL data loader
+│   ├── tissue_masks.py  # Tissue mask derivation from real CBF maps
+│   └── pipeline.py      # Main QC pipeline runner
+├── run_pipeline.py      # CLI entry point for real-data pipeline
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Quick Start
+## Real-Data Pipeline
+
+### 1. Install dependencies
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Run the demo (generates synthetic data + QEI report)
-python demo.py
 ```
 
-### What the demo does
+### 2. Get the ExploreASL TestDataSet
 
-1. Builds a synthetic 3D brain (64×64×30 voxels) with GM / WM / CSF regions
-2. Generates three CBF maps — **Excellent**, **Average**, **Poor** — by adding increasing noise and artefacts
-3. Computes QEI for each and prints a results table
-4. Saves `qei_report.png` with CBF slices and a score bar chart
+Clone the ExploreASL repository to get access to their `TestDataSet`:
 
+```bash
+git clone --depth 1 https://github.com/ExploreASL/ExploreASL data/ExploreASL
 ```
-Case        QEI     pss     DI    neg GM   Grade
-────────────────────────────────────────────────
-Excellent  ~0.85   ~0.93   ~1.2    1.0%   Excellent
-Average    ~0.60   ~0.72   ~4.5   10.0%   Average
-Poor       ~0.20   ~0.40  ~18.0   35.0%   Poor
+
+### 3. Run QC pipeline using ExploreASL TestDataSet
+
+```bash
+python run_pipeline.py run --bids ./data/ExploreASL/External/TestDataSet/rawdata --output ./qc_output
+```
+
+**Output:**
+- `qc_output/qc_results.csv` — per-subject QEI, PSS, DI, nGM, mean CBF, flags
+- `qc_output/qc_summary.png` — 4-panel distribution plot
+
+### 4. Custom thresholds (optional)
+
+```bash
+# Pediatric or clinical population with different physiology
+python run_pipeline.py run \
+    --bids ./data/ExploreASL/External/TestDataSet/rawdata \
+    --output ./qc_output \
+    --qei-min 0.65 \
+    --mean-gm-min 20 \
+    --mean-gm-max 80
+```
+
+### 5. Run on your own BIDS data (skip download)
+
+```bash
+python run_pipeline.py run --bids /path/to/my_bids_dataset --output ./qc_output
 ```
 
 ---
 
-## Use with your own data
+## Default QC Thresholds
 
-```python
-from qc_toolbox.qei import compute_qei
-
-# Load your arrays (e.g. from NIfTI via nibabel)
-result = compute_qei(cbf_map, gm_mask, wm_mask, csf_mask)
-print(result)
-# {'qei': 0.74, 'pss': 0.85, 'di': 3.2, 'n_gm': 0.04}
-```
+| Metric | Threshold | Rationale |
+|--------|-----------|-----------|
+| QEI | ≥ 0.70 | Dolui et al. 2024 recommended pass threshold |
+| PSS | ≥ 0.40 | Low structural similarity = spatial artefacts |
+| DI | ≤ 2.00 | High DI = noise or motion dominance |
+| neg GM fraction | ≤ 0.10 | >10% negative GM CBF = severe artefact |
+| Mean GM CBF | 10–120 ml/100g/min | Physiological plausibility range |
 
 ---
 
@@ -97,5 +119,6 @@ print(result)
 | Resource | Link |
 |----------|------|
 | QEI paper (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
-| ASL MRI overview | [ISMRM ASL Perfusion Study Group](https://www.ismrm.org/study-groups/perfusion/) |
+| BIDS ASL specification | [BIDS ASL Extension](https://bids-specification.readthedocs.io) |
+| OpenNeuro datasets | [openneuro.org](https://openneuro.org) |
 | ExploreASL QC toolbox | [ExploreASL on GitHub](https://github.com/ExploreASL/ExploreASL) |
