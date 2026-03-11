@@ -4,7 +4,10 @@
 from .qei import compute_qei
 
 # ── Synthetic data (demo / testing) ──────────────────────────────────────── #
-from .synthetic import make_tissue_masks, make_cbf_map, save_dataset, load_dataset
+try:
+    from .synthetic import make_tissue_masks, make_cbf_map, save_dataset, load_dataset
+except ImportError:
+    pass  # synthetic module is optional — not available in all environments
 
 # ── Real data pipeline ────────────────────────────────────────────────────── #
 from .bids_loader  import discover_subjects, load_subject, iter_dataset, ASLSubject
