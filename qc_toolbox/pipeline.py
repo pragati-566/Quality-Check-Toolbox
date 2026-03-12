@@ -203,7 +203,7 @@ def run_pipeline(
                 shutil.copy("live_index.html", os.path.join(wt_dir, "index.html"))
                 subprocess.run(["git", "-C", wt_dir, "add", "index.html"], check=True)
                 subprocess.run(["git", "-C", wt_dir, "commit", "-m", f"QC update: {subject.label}"], check=False)
-                subprocess.run(["git", "-C", wt_dir, "push"], check=False)
+                subprocess.run(["git", "-C", wt_dir, "push", "origin", "HEAD:gh-pages"], check=False)
                 
             if live_html_path:
                 generate_live_html(results, total_subjects=0, output_path=str(live_html_path))
