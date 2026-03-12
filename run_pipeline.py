@@ -42,6 +42,7 @@ def cmd_run(args):
         subjects   = args.subjects,
         thresholds = thresholds,
         save_plots = not args.no_plots,
+        live_html_path = "qc_live_run.html" if args.live_html else None,
     )
 
 
@@ -66,6 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Subject IDs to process (default: all)")
     run.add_argument("--no-plots",    action="store_true",
                      help="Skip saving summary plots")
+    run.add_argument("--live-html",   action="store_true",
+                     help="Generate a live HTML dashboard (qc_live_run.html) in the current directory")
     # Threshold overrides
     run.add_argument("--qei-min",     type=float, default=None,
                      metavar="FLOAT", help="Minimum QEI threshold (default 0.70)")

@@ -56,6 +56,7 @@ class ASLSubject:
         self,
         subject_id: str,
         session_id: str | None,
+        asl_data: np.ndarray,
         cbf_map: np.ndarray,
         m0_map: np.ndarray | None,
         asl_context: list[str],
@@ -64,6 +65,7 @@ class ASLSubject:
     ):
         self.subject_id  = subject_id
         self.session_id  = session_id
+        self.asl_data    = asl_data
         self.cbf_map     = cbf_map
         self.m0_map      = m0_map
         self.asl_context = asl_context
@@ -273,6 +275,7 @@ def load_subject(
     return ASLSubject(
         subject_id  = subject_id,
         session_id  = session_id,
+        asl_data    = asl_data,
         cbf_map     = cbf_map,
         m0_map      = m0_map,
         asl_context = context,

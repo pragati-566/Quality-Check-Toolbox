@@ -98,6 +98,15 @@ def _qc_subject(subject: ASLSubject, thresholds: dict) -> dict:
         if mean_gm_cbf > t["mean_gm_cbf_max"]:
             flags.append(f"meanGM_CBF={mean_gm_cbf:.1f}>{t['mean_gm_cbf_max']}")
 
+    # Extract raw timeseries (mean whole brain signal for each volume)
+    # ASL context tells us which volume is control vs label
+    brain_mask = gm_mask | wm_mask | csf_mask
+    raw_timeseries = []
+    if brain_mask.any() and subject.asl_data is not None:
+        for vol_idx in range(subject.asl_data.shape[-1]):
+            vol = subject.asl_data[..., vol_idx]
+            raw_timeseries.append(float(vol[brain_mask].mean()))
+            
     return {
         "subject_id":    subject.subject_id,
         "session_id":    subject.session_id or "",
@@ -110,6 +119,11 @@ def _qc_subject(subject: ASLSubject, thresholds: dict) -> dict:
         "std_gm_cbf":    round(std_gm_cbf,    2),
         "spatial_cov":   round(spatial_cov,   4),
         "n_volumes":     len(subject.asl_context),
+        "raw_timeseries": raw_timeseries,
+        "asl_context":   subject.asl_context,
+        "gm_mask":       gm_mask,
+        "wm_mask":       wm_mask,
+        "csf_mask":      csf_mask,
         "flagged":       len(flags) > 0,
         "flags":         "; ".join(flags) if flags else "PASS",
     }
@@ -125,6 +139,7 @@ def run_pipeline(
     subjects:   list[str] | None = None,
     thresholds: dict | None = None,
     save_plots: bool = True,
+    live_html_path: str | Path | None = None,
     verbose:    bool = True,
 ) -> list[dict]:
     """
@@ -137,6 +152,7 @@ def run_pipeline(
     subjects   : optional list of subject IDs to process
     thresholds : dict of threshold overrides; defaults to DEFAULT_THRESHOLDS
     save_plots : if True, save per-cohort QEI distribution plot
+    live_html_path: if set, updates a standalone HTML dashboard at this path per subject
     verbose    : if True, print progress to stdout
 
     Returns
@@ -158,22 +174,50 @@ def run_pipeline(
         print(f"  Output   : {output_dir.resolve()}")
         print(f"  Started  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
+    # ── For live UI ──
+    from .live_html import generate_live_html
+    import subprocess
+    import shutil
+
     for i, subject in enumerate(iter_dataset(bids_root, subjects=subjects)):
         if verbose:
             print(f"  [{i+1:>3}] {subject.label:<25}", end=" ", flush=True)
         try:
             result = _qc_subject(subject, t)
-            results.append(result)
+            
+            # Keep a reference to the CBF map for the live HTML plot
+            result_copy = dict(result)
+            result_copy["cbf_map"] = subject.cbf_map
+            results.append(result_copy)
+            
             if verbose:
                 flag_str = "[!] FLAGGED" if result["flagged"] else "[OK] PASS"
                 print(f"QEI={result['qei']:.3f}  {flag_str}")
                 if result["flagged"]:
                     print(f"            -> {result['flags']}")
+                    
+            # ── Push Live Update ──────────────────────────────────────────────── #
+            if os.environ.get("LIVE_HTML_WORKTREE_DIR"):
+                wt_dir = os.environ.get("LIVE_HTML_WORKTREE_DIR")
+                generate_live_html(results, total_subjects=0, output_path="live_index.html")
+                shutil.copy("live_index.html", os.path.join(wt_dir, "index.html"))
+                subprocess.run(["git", "-C", wt_dir, "add", "index.html"], check=True)
+                subprocess.run(["git", "-C", wt_dir, "commit", "-m", f"QC update: {subject.label}"], check=False)
+                subprocess.run(["git", "-C", wt_dir, "push"], check=False)
+                
+            if live_html_path:
+                generate_live_html(results, total_subjects=0, output_path=str(live_html_path))
+                
         except Exception as exc:  # noqa: BLE001
             msg = f"{subject.label}: {exc}"
             errors.append(msg)
             if verbose:
                 print(f"ERROR — {exc}")
+
+    # Remove the bulky cbf_map from results before CSV saving to avoid large memory / serialization bounds
+    for r in results:
+        r.pop("cbf_map", None)
+
 
     # ── Save CSV ──────────────────────────────────────────────────────────── #
     if results:
