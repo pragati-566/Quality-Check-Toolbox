@@ -210,9 +210,9 @@ def generate_live_html(results: list[dict], total_subjects: int, output_path: st
 
         .grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 1.5rem;
-            max-width: 1400px;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 2rem;
+            max-width: 1800px;
             margin: 0 auto;
         }}
         .card {{
