@@ -9,6 +9,28 @@ A Python toolbox for **automated Quality Control (QC) of Arterial Spin Labeling 
 
 ---
 
+## Pipeline Flow
+
+```mermaid
+flowchart LR
+    A[BIDS] --> B[Load ASL + M0]
+    B --> C[Mean CBF]
+    C --> D[Tissue Masks]
+    D --> E[Smooth 5mm]
+    E --> F[PSS]
+    E --> G[DI]
+    E --> H[nGM]
+    F --> I[QEI]
+    G --> I
+    H --> I
+    I --> J[Flags]
+    D --> K[Spatial CoV]
+    B --> L[Timeseries]
+    J --> M[CSV + Plots]
+```
+
+---
+
 ## What is ASL and why does QC matter?
 
 **Arterial Spin Labeling (ASL)** is an MRI technique that measures cerebral blood flow (CBF) non-invasively by magnetically labelling water in blood as it enters the brain. It is widely used in studies of Alzheimer's disease, stroke, and other neurological conditions.
@@ -23,19 +45,35 @@ Manual quality rating by radiologists is gold-standard but slow and subjective. 
 
 ---
 
-## QEI Formula
+## QC Metrics
+
+### QEI — Quality Evaluation Index
+
+Composite score in [0, 1] from three independent failure modes. Uses ASLPrep empirical coefficients:
 
 ```
-QEI = ∛( (1 - exp(-3·ρ_ss^2.4)) · exp(-(0.1·DI^0.9 + 2.8·p_nGMCBF^0.5)) )
+QEI = ∛( (1 - exp(α·ρ_ss^β)) · exp(-(γ·DI^δ + ε·nGMCBF^ζ)) )
+α=-3.0126, β=2.4419, γ=0.054, δ=0.9272, ε=2.8478, ζ=0.5196
 ```
 
-| Paper symbol | Code variable | Component | What it catches |
-|---|---|---|-----------------|
-| **ρ_ss** | `pss` | Structural similarity | Pearson correlation between CBF and pseudo-structural CBF. Low = spatial pattern destroyed by noise/artefacts |
-| **DI** | `di` | Index of dispersion | High variance across tissue = motion or incomplete labelling |
-| **p_nGMCBF** | `n_gm` | Negative GM fraction | CBF is always positive physiologically — negatives are pure artefact |
+| Variable | Component | Description |
+|----------|-----------|-------------|
+| **ρ_ss (PSS)** | Pseudo-Structural Similarity | Pearson correlation between CBF and pseudo-structural CBF (2.5×GM + 1×WM). Low = spatial pattern destroyed by noise/artefacts |
+| **DI** | Index of Dispersion | Within-tissue pooled variance / \|mean GM CBF\|. High = motion or incomplete labelling |
+| **nGMCBF** | Negative GM fraction | Fraction of GM voxels with negative CBF (physiologically implausible → artefact) |
 
-QEI ranges from **0** (unusable) → **1** (excellent).
+CBF is smoothed at 5 mm FWHM before QEI computation.
+
+### Additional metrics (per subject)
+
+| Metric | Description |
+|--------|--------------|
+| **mean_gm_cbf** | Mean CBF in grey matter (ml/100g/min) |
+| **median_gm_cbf** | Median CBF in grey matter |
+| **std_gm_cbf** | Standard deviation of CBF in GM |
+| **spatial_cov** | Spatial coefficient of variation in GM: 100 × σ/μ (%) — sensitive to vascular artefacts |
+| **n_volumes** | Number of ASL volumes (control + label) |
+| **raw_timeseries** | Mean whole-brain signal per volume (for control-label pattern inspection) |
 
 ---
 
@@ -44,12 +82,14 @@ QEI ranges from **0** (unusable) → **1** (excellent).
 ```
 Quality-Check-Toolbox/
 ├── qc_toolbox/
-│   ├── qei.py           # Core QEI formula (Dolui et al. 2024)
-│   ├── visualize.py     # Plots & console report
+│   ├── qei.py           # QEI computation (Dolui et al. 2024)
 │   ├── bids_loader.py   # BIDS-format ASL data loader
-│   ├── tissue_masks.py  # Tissue mask derivation from real CBF maps
-│   └── pipeline.py      # Main QC pipeline runner
-├── run_pipeline.py      # CLI entry point for real-data pipeline
+│   ├── tissue_masks.py  # Tissue mask derivation from CBF maps
+│   ├── pipeline.py      # Main QC pipeline runner
+│   ├── visualize.py     # Plots & console report
+│   └── live_html.py     # Live HTML dashboard generator
+├── run_pipeline.py      # CLI entry point
+├── qc_live_run.html     # Generated live dashboard (with --live-html)
 ├── requirements.txt
 └── README.md
 ```
@@ -79,8 +119,8 @@ python run_pipeline.py run --bids ./data/ExploreASL/External/TestDataSet/rawdata
 ```
 
 **Output:**
-- `qc_output/qc_results.csv` — per-subject QEI, PSS, DI, nGM, mean CBF, flags
-- `qc_output/qc_summary.png` — 4-panel distribution plot
+- `qc_output/qc_results.csv` — per-subject QEI, PSS, DI, nGM, mean/median/std GM CBF, spatial CoV, n_volumes, flags
+- `qc_output/qc_summary.png` — 4-panel distribution plot (QEI, PSS, mean GM CBF, spatial CoV)
 
 ### 4. Custom thresholds (optional)
 
@@ -94,7 +134,18 @@ python run_pipeline.py run \
     --mean-gm-max 80
 ```
 
-### 5. Run on your own BIDS data (skip download)
+### 5. Live HTML dashboard (optional)
+
+Generate a standalone HTML dashboard that updates as subjects are processed:
+
+```bash
+python run_pipeline.py run --bids ./data/ExploreASL/External/TestDataSet/rawdata \
+    --output ./qc_output --live-html
+```
+
+Creates `qc_live_run.html` in the current directory with CBF slices, histograms, control-label timeseries, and QEI scores.
+
+### 6. Run on your own BIDS data (skip download)
 
 ```bash
 python run_pipeline.py run --bids /path/to/my_bids_dataset --output ./qc_output
@@ -119,6 +170,7 @@ python run_pipeline.py run --bids /path/to/my_bids_dataset --output ./qc_output
 | Resource | Link |
 |----------|------|
 | QEI paper (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
+| ASLPrep | [ASLPrep on GitHub](https://github.com/PennLINC/aslprep) |
 | BIDS ASL specification | [BIDS ASL Extension](https://bids-specification.readthedocs.io) |
 | OpenNeuro datasets | [openneuro.org](https://openneuro.org) |
 | ExploreASL QC toolbox | [ExploreASL on GitHub](https://github.com/ExploreASL/ExploreASL) |

@@ -66,19 +66,20 @@ def _qc_subject(subject: ASLSubject, thresholds: dict) -> dict:
     # 1. Derive tissue masks from the CBF map
     gm_mask, wm_mask, csf_mask = masks_from_cbf(cbf)
 
-    # 2. Compute QEI
+    # 2. Compute QEI (5 mm FWHM smoothing; affine for voxel size)
     qei_result = compute_qei(
         cbf_map  = cbf,
         gm_mask  = gm_mask,
         wm_mask  = wm_mask,
         csf_mask = csf_mask,
+        affine   = subject.affine,
     )
 
     # 3. Additional QC metrics
     mean_gm_cbf = float(cbf[gm_mask].mean()) if gm_mask.any() else float("nan")
     median_gm_cbf = float(np.median(cbf[gm_mask])) if gm_mask.any() else float("nan")
     std_gm_cbf  = float(cbf[gm_mask].std())  if gm_mask.any() else float("nan")
-    spatial_cov = (std_gm_cbf / mean_gm_cbf) if mean_gm_cbf not in (0, float("nan")) else float("nan")
+    spatial_cov = (100.0 * std_gm_cbf / mean_gm_cbf) if mean_gm_cbf not in (0, float("nan")) else float("nan")
 
     # 4. Determine flags
     flags: list[str] = []
