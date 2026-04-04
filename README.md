@@ -1,8 +1,8 @@
 # Quality Check Toolbox v1.0
 
-A Python toolbox for **automated Quality Control (QC) of Arterial Spin Labeling (ASL) MRI data**, featuring a full real-data pipeline for BIDS-formatted datasets.
+A Python toolbox for **automated Quality Control (QC) of Arterial Spin Labeling (ASL) MRI data** on BIDS-formatted datasets.
 
-*This project is developed as part of a GSoC proposal for Quality Check Toolbox v1.0.*
+*Developed as part of a GSoC project for Quality Check Toolbox v1.0.*
 
 > *Automated Quality Evaluation Index for Arterial Spin Labeling Derived Cerebral Blood Flow Maps.*
 > Dolui et al., JMRI 2024. [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308)
@@ -23,7 +23,7 @@ flowchart LR
     F --> I[QEI]
     G --> I
     H --> I
-    I --> J[Flags]
+    I --> J[Flag if QEI low]
     D --> K[Spatial CoV]
     B --> L[Timeseries]
     J --> M[CSV + Plots]
@@ -31,17 +31,9 @@ flowchart LR
 
 ---
 
-## What is ASL and why does QC matter?
+## What is ASL and why QC matters
 
-**Arterial Spin Labeling (ASL)** is an MRI technique that measures cerebral blood flow (CBF) non-invasively by magnetically labelling water in blood as it enters the brain. It is widely used in studies of Alzheimer's disease, stroke, and other neurological conditions.
-
-ASL CBF maps are however prone to:
-- **Motion artefacts** — patient movement between label/control pairs
-- **Low SNR** — only ~1% of the signal comes from labelled blood
-- **Incomplete labelling** — when blood arrives late, CBF appears artificially low or negative
-- **Noise** — poor shimming, RF inhomogeneity
-
-Manual quality rating by radiologists is gold-standard but slow and subjective. **QEI automates this** with a single scalar score in [0, 1].
+**Arterial Spin Labeling (ASL)** measures cerebral blood flow non-invasively. ASL CBF maps are sensitive to motion, low SNR, incomplete labelling, and noise. **QEI** summarizes quality in a single score in [0, 1].
 
 ---
 
@@ -86,17 +78,21 @@ Quality-Check-Toolbox/
 │   ├── bids_loader.py   # BIDS-format ASL data loader
 │   ├── tissue_masks.py  # Tissue mask derivation from CBF maps
 │   ├── pipeline.py      # Main QC pipeline runner
-│   ├── visualize.py     # Plots & console report
-│   └── live_html.py     # Live HTML dashboard generator
-├── run_pipeline.py      # CLI entry point
-├── qc_live_run.html     # Generated live dashboard (with --live-html)
+│   ├── visualize.py            # Plots & console report
+│   ├── live_html.py            # Live HTML dashboard
+│   └── threshold_derivation.py # GMM / IQR cohort thresholds
+├── scripts/
+│   ├── derive_thresholds.py
+│   └── adni_to_bids_asl.py
+├── run_pipeline.py
+├── docs/images/          # example threshold figures (below)
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Real-Data Pipeline
+## Real-data pipeline
 
 ### 1. Install dependencies
 
@@ -104,73 +100,119 @@ Quality-Check-Toolbox/
 pip install -r requirements.txt
 ```
 
-### 2. Get the ExploreASL TestDataSet
-
-Clone the ExploreASL repository to get access to their `TestDataSet`:
+### 2. ExploreASL test dataset (optional)
 
 ```bash
 git clone --depth 1 https://github.com/ExploreASL/ExploreASL data/ExploreASL
 ```
 
-### 3. Run QC pipeline using ExploreASL TestDataSet
+ASL BIDS data for the smoke test: `data/ExploreASL/External/TestDataSet/rawdata`.
+
+### 3. Run QC on the test dataset
 
 ```bash
-python run_pipeline.py run --bids ./data/ExploreASL/External/TestDataSet/rawdata --output ./qc_output
+python run_pipeline.py run \
+  --bids ./data/ExploreASL/External/TestDataSet/rawdata \
+  --output ./qc_output
 ```
 
-**Output:**
-- `qc_output/qc_results.csv` — per-subject QEI, PSS, DI, nGM, mean/median/std GM CBF, spatial CoV, n_volumes, flags
-- `qc_output/qc_summary.png` — 4-panel distribution plot (QEI, PSS, mean GM CBF, spatial CoV)
+**Outputs**
+
+- `qc_output/qc_results.csv` — QEI, PSS, DI, n_gm, mean/median/std GM, spatial CoV, n_volumes, flags, etc.
+- `qc_output/qc_summary.png` — four-panel cohort summary (QEI, PSS, mean GM, spatial CoV)
 
 ### 4. Custom thresholds (optional)
 
 ```bash
-# Pediatric or clinical population with different physiology
 python run_pipeline.py run \
-    --bids ./data/ExploreASL/External/TestDataSet/rawdata \
-    --output ./qc_output \
-    --qei-min 0.65 \
-    --mean-gm-min 20 \
-    --mean-gm-max 80
+  --bids ./data/ExploreASL/External/TestDataSet/rawdata \
+  --output ./qc_output \
+  --qei-min 0.65 \
+  --mean-gm-min 20 \
+  --mean-gm-max 80
 ```
+
+Use **`--strict-qcbf`** when the input map is true quantified CBF (ml/100g/min) instead of the default mean control−label proxy.
 
 ### 5. Live HTML dashboard (optional)
 
-Generate a standalone HTML dashboard that updates as subjects are processed:
-
 ```bash
-python run_pipeline.py run --bids ./data/ExploreASL/External/TestDataSet/rawdata \
-    --output ./qc_output --live-html
+python run_pipeline.py run \
+  --bids ./data/ExploreASL/External/TestDataSet/rawdata \
+  --output ./qc_output \
+  --live-html
 ```
 
-Creates `qc_live_run.html` in the current directory with CBF slices, histograms, control-label timeseries, and QEI scores.
+Writes **`qc_live_run.html`** in the current working directory (CBF slices, histograms, control–label timeseries, QEI).
 
-### 6. Run on your own BIDS data (skip download)
+### 6. Your own BIDS dataset
 
 ```bash
 python run_pipeline.py run --bids /path/to/my_bids_dataset --output ./qc_output
 ```
 
+### 7. ADNI DICOM → BIDS `perf/` (optional)
+
+If downloads use ADNI’s native folders, convert with **`scripts/adni_to_bids_asl.py`** (requires **[dcm2niix](https://github.com/rordenlab/dcm2niix)** on `PATH`):
+
+```bash
+python scripts/adni_to_bids_asl.py \
+  --adni /path/to/ADNI_native_root \
+  --bids /path/to/ADNI_BIDS_output \
+  --dcm2niix dcm2niix
+```
+
+Dry-run (list DICOM folders only): add **`--dry-run`**.
+
 ---
 
-## Default QC Thresholds
+## Pass / fail
 
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| QEI | ≥ 0.70 | Dolui et al. 2024 recommended pass threshold |
-| PSS | ≥ 0.40 | Low structural similarity = spatial artefacts |
-| DI | ≤ 2.00 | High DI = noise or motion dominance |
-| neg GM fraction | ≤ 0.10 | >10% negative GM CBF = severe artefact |
-| Mean GM CBF | 10–120 ml/100g/min | Physiological plausibility range |
+**Only QEI** sets `flagged` in the CSV. PSS, DI, and n_gm are stored for diagnosis but not separately thresholded (they feed QEI).
+
+| Preset | Rule |
+|--------|------|
+| **Default** | QEI ≥ 0.30 |
+| **`--strict-qcbf`** | QEI ≥ 0.70 and mean GM map in 10–120 ml/100g/min |
 
 ---
 
-## Learn more
+## Threshold derivation (GMM vs IQR)
+
+After `qc_results.csv` exists for a cohort, `scripts/derive_thresholds.py` fits a **two-component Gaussian mixture** and draws the threshold at the **PDF crossing** between the two modes (“valley”). **Tukey IQR fences** (Q1 − 1.5×IQR, Q3 + 1.5×IQR) are overlaid for comparison. Default metrics: **QEI** and **spatial CoV**. Outputs include `qei_gmm_iqr.png`, `spatial_cov_gmm_iqr.png`, `threshold_report.md`, and `threshold_report.json` (≥10 subjects per metric recommended).
+
+### Example: ADNI BIDS cohort (n = 50)
+
+The figures below come from threshold derivation run on **50 ASL MRI scans** on **Siemens 3 T** MRI systems (**three-Tesla** main magnetic field), **baseline** test data, with **homogeneous acquisition** across subjects (supporting cohort-level GMM/IQR thresholding). Data were prepared as BIDS ASL (e.g. converted ADNI perfusion). Check [ADNI](https://adni.loni.usc.edu/) policies before redistributing cohort-derived plots.
+
+| QEI | Spatial CoV |
+|-----|-------------|
+| ![QEI GMM vs IQR](docs/images/example_qei_gmm_iqr.png) | ![Spatial CoV GMM vs IQR](docs/images/example_spatial_cov_gmm_iqr.png) |
+
+*Red vertical: GMM cut. Purple dotted: IQR fences. Black: mixture PDF; dashed: mixture components.*
+
+```bash
+python scripts/derive_thresholds.py \
+  --csv qc_output/qc_results.csv \
+  --output qc_output/threshold_analysis
+```
+
+**Requirements:** `scikit-learn` (listed in `requirements.txt`). At least **~10 subjects** per metric; more is better for a stable GMM.
+
+**Options**
+
+- **`--metrics qei spatial_cov`** — default if omitted (QEI + spatial CoV only).
+- **`--metrics qei spatial_cov pss di n_gm`** — include QEI components for exploratory fits.
+- **`--seed N`** — GMM random seed (default 0).
+
+---
+
+## References
 
 | Resource | Link |
 |----------|------|
-| QEI paper (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
-| ASLPrep | [ASLPrep on GitHub](https://github.com/PennLINC/aslprep) |
-| BIDS ASL specification | [BIDS ASL Extension](https://bids-specification.readthedocs.io) |
-| OpenNeuro datasets | [openneuro.org](https://openneuro.org) |
-| ExploreASL QC toolbox | [ExploreASL on GitHub](https://github.com/ExploreASL/ExploreASL) |
+| QEI (Dolui et al. 2024) | [doi:10.1002/jmri.29308](https://doi.org/10.1002/jmri.29308) |
+| ASLPrep | [github.com/PennLINC/aslprep](https://github.com/PennLINC/aslprep) |
+| BIDS ASL | [bids-specification](https://bids-specification.readthedocs.io) |
+| ExploreASL | [github.com/ExploreASL/ExploreASL](https://github.com/ExploreASL/ExploreASL) |
+| OpenNeuro | [openneuro.org](https://openneuro.org) |

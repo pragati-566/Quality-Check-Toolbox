@@ -35,21 +35,28 @@ from .qei           import compute_qei
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Default thresholds (literature-informed starting values)
+# Threshold presets
 # ──────────────────────────────────────────────────────────────────────────────
+#
+# DEFAULT: tuned for mean control−label difference maps (raw ASL proxy), CBF
+# percentile masks — DI and QEI ranges differ from quantified CBF (e.g. ASLPrep).
+#
+# STRICT_QUANTIFIED_CBF: stricter cut-offs when the input map is true CBF
+# (ml/100g/min) from a full quantification pipeline + proper segmentation.
+
+# Pass/fail uses QEI only. PSS, DI, n_gm stay in CSV for debugging — they are
+# already folded into QEI, so separate cut-offs would double-count.
 
 DEFAULT_THRESHOLDS: dict[str, Any] = {
-    # QEI < 0.7 → flag as poor quality (Dolui et al. 2024 guideline)
-    "qei_min":      0.70,
-    # Structural similarity: good scans should correlate well with GM/WM anatomy
-    "pss_min":      0.40,
-    # Index of dispersion: very high DI suggests noise dominance
-    "di_max":       2.00,
-    # Negative GM CBF fraction: >10% negative voxels is a red-flag
-    "n_gm_max":     0.10,
-    # Mean GM CBF sanity range (ml/100g/min) — physiologically implausible otherwise
-    "mean_gm_cbf_min":  10.0,
-    "mean_gm_cbf_max": 120.0,
+    "qei_min":           0.30,
+    "mean_gm_cbf_min":   float("-inf"),
+    "mean_gm_cbf_max":   float("inf"),
+}
+
+STRICT_QUANTIFIED_CBF_THRESHOLDS: dict[str, Any] = {
+    "qei_min":           0.70,
+    "mean_gm_cbf_min":   10.0,
+    "mean_gm_cbf_max":   120.0,
 }
 
 
@@ -87,17 +94,12 @@ def _qc_subject(subject: ASLSubject, thresholds: dict) -> dict:
 
     if qei_result["qei"] < t["qei_min"]:
         flags.append(f"QEI={qei_result['qei']:.3f}<{t['qei_min']}")
-    if qei_result["pss"] < t["pss_min"]:
-        flags.append(f"PSS={qei_result['pss']:.3f}<{t['pss_min']}")
-    if qei_result["di"] > t["di_max"]:
-        flags.append(f"DI={qei_result['di']:.3f}>{t['di_max']}")
-    if qei_result["n_gm"] > t["n_gm_max"]:
-        flags.append(f"nGM={qei_result['n_gm']:.3f}>{t['n_gm_max']}")
-    if not np.isnan(mean_gm_cbf):
-        if mean_gm_cbf < t["mean_gm_cbf_min"]:
-            flags.append(f"meanGM_CBF={mean_gm_cbf:.1f}<{t['mean_gm_cbf_min']}")
-        if mean_gm_cbf > t["mean_gm_cbf_max"]:
-            flags.append(f"meanGM_CBF={mean_gm_cbf:.1f}>{t['mean_gm_cbf_max']}")
+    lo, hi = t["mean_gm_cbf_min"], t["mean_gm_cbf_max"]
+    if lo < hi and not np.isnan(mean_gm_cbf):
+        if mean_gm_cbf < lo:
+            flags.append(f"meanGM_CBF={mean_gm_cbf:.1f}<{lo}")
+        if mean_gm_cbf > hi:
+            flags.append(f"meanGM_CBF={mean_gm_cbf:.1f}>{hi}")
 
     # Extract raw timeseries (mean whole brain signal for each volume)
     # ASL context tells us which volume is control vs label
@@ -241,7 +243,7 @@ def run_pipeline(
         # ── Save summary plot ──────────────────────────────────────────────── #
         if save_plots:
             try:
-                _save_summary_plot(results, output_dir)
+                _save_summary_plot(results, output_dir, thresholds=t)
                 if verbose:
                     print(f"  Plot      -> {output_dir / 'qc_summary.png'}")
             except Exception as exc:
@@ -257,7 +259,11 @@ def run_pipeline(
 # Summary plot
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _save_summary_plot(results: list[dict], output_dir: Path) -> None:
+def _save_summary_plot(
+    results: list[dict],
+    output_dir: Path,
+    thresholds: dict[str, Any] | None = None,
+) -> None:
     """
     Save a 4-panel QC summary figure:
       - QEI distribution (histogram with PASS/FAIL shading)
@@ -268,7 +274,8 @@ def _save_summary_plot(results: list[dict], output_dir: Path) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
+    th = thresholds or DEFAULT_THRESHOLDS
+    qei_thr = th.get("qei_min", 0.30)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle(
@@ -277,14 +284,11 @@ def _save_summary_plot(results: list[dict], output_dir: Path) -> None:
     )
 
     metrics = [
-        ("qei",         "QEI",              "#4CAF50", 0.7,  True,  (0, 1)),
-        ("pss",         "Structural Sim.",  "#2196F3", 0.4,  True,  (0, 1)),
-        ("mean_gm_cbf", "Mean GM CBF",      "#FF9800", None, False, None),
-        ("spatial_cov", "Spatial CoV (GM)", "#9C27B0", None, False, None),
+        ("qei",         "QEI (pass/fail)",    "#4CAF50", qei_thr, True,  (0, 1)),
+        ("pss",         "PSS (in QEI)",       "#2196F3", None,    True,  (0, 1)),
+        ("mean_gm_cbf", "Mean GM map value",  "#FF9800", None,    False, None),
+        ("spatial_cov", "Spatial CoV %",      "#9C27B0", None,    False, None),
     ]
-
-    pass_patch = mpatches.Patch(color="#4CAF50", alpha=0.3, label="PASS region")
-    fail_patch = mpatches.Patch(color="#F44336", alpha=0.3, label="FAIL region")
 
     for ax, (key, title, color, threshold, higher_is_better, xlim) in zip(axes.flat, metrics):
         values = [r[key] for r in results if not isinstance(r[key], float) or not np.isnan(r[key])]
@@ -340,22 +344,27 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--subjects", nargs="+", default=None, help="Subject IDs to process")
     p.add_argument("--no-plots", action="store_true",  help="Skip saving summary plots")
     p.add_argument(
-        "--qei-min",  type=float, default=DEFAULT_THRESHOLDS["qei_min"],
-        help=f"QEI pass threshold (default {DEFAULT_THRESHOLDS['qei_min']})"
+        "--strict-qcbf",
+        action="store_true",
+        help="Use strict thresholds for quantified CBF maps (ml/100g/min), not raw difference maps",
     )
     p.add_argument(
-        "--di-max",   type=float, default=DEFAULT_THRESHOLDS["di_max"],
-        help=f"Max DI threshold (default {DEFAULT_THRESHOLDS['di_max']})"
+        "--qei-min",  type=float, default=None,
+        help="QEI pass threshold (overrides preset default)",
     )
     return p
 
 
 if __name__ == "__main__":
     args = _build_parser().parse_args()
+    base = STRICT_QUANTIFIED_CBF_THRESHOLDS if args.strict_qcbf else DEFAULT_THRESHOLDS
+    th = dict(base)
+    if args.qei_min is not None:
+        th["qei_min"] = args.qei_min
     run_pipeline(
         bids_root  = args.bids,
         output_dir = args.output,
         subjects   = args.subjects,
-        thresholds = {"qei_min": args.qei_min, "di_max": args.di_max},
+        thresholds = th,
         save_plots = not args.no_plots,
     )

@@ -2,6 +2,7 @@
 numpy
 scipy
 matplotlib
+scikit-learn
 
 # Real data I/O (BIDS NIfTI loading)
 nibabel

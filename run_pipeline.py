@@ -27,14 +27,23 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 
 def cmd_run(args):
-    from qc_toolbox.pipeline import run_pipeline, DEFAULT_THRESHOLDS
+    from qc_toolbox.pipeline import (
+        run_pipeline,
+        DEFAULT_THRESHOLDS,
+        STRICT_QUANTIFIED_CBF_THRESHOLDS,
+    )
 
-    thresholds = dict(DEFAULT_THRESHOLDS)
-    if args.qei_min   is not None: thresholds["qei_min"]         = args.qei_min
-    if args.di_max    is not None: thresholds["di_max"]           = args.di_max
-    if args.ngm_max   is not None: thresholds["n_gm_max"]         = args.ngm_max
-    if args.mean_gm_min is not None: thresholds["mean_gm_cbf_min"] = args.mean_gm_min
-    if args.mean_gm_max is not None: thresholds["mean_gm_cbf_max"] = args.mean_gm_max
+    thresholds = dict(
+        STRICT_QUANTIFIED_CBF_THRESHOLDS
+        if getattr(args, "strict_qcbf", False)
+        else DEFAULT_THRESHOLDS
+    )
+    if args.qei_min is not None:
+        thresholds["qei_min"] = args.qei_min
+    if args.mean_gm_min is not None:
+        thresholds["mean_gm_cbf_min"] = args.mean_gm_min
+    if args.mean_gm_max is not None:
+        thresholds["mean_gm_cbf_max"] = args.mean_gm_max
 
     run_pipeline(
         bids_root  = args.bids,
@@ -69,17 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Skip saving summary plots")
     run.add_argument("--live-html",   action="store_true",
                      help="Generate a live HTML dashboard (qc_live_run.html) in the current directory")
+    run.add_argument(
+        "--strict-qcbf",
+        action="store_true",
+        help="Strict thresholds for quantified CBF (ml/100g/min); default preset is for raw mean control-label maps",
+    )
     # Threshold overrides
     run.add_argument("--qei-min",     type=float, default=None,
-                     metavar="FLOAT", help="Minimum QEI threshold (default 0.70)")
-    run.add_argument("--di-max",      type=float, default=None,
-                     metavar="FLOAT", help="Maximum DI threshold (default 2.00)")
-    run.add_argument("--ngm-max",     type=float, default=None,
-                     metavar="FLOAT", help="Max negative GM fraction (default 0.10)")
+                     metavar="FLOAT", help="Minimum QEI (overrides preset)")
     run.add_argument("--mean-gm-min", type=float, default=None,
-                     metavar="FLOAT", help="Min mean GM CBF ml/100g/min (default 10)")
+                     metavar="FLOAT", help="Min mean GM map value (strict preset default 10)")
     run.add_argument("--mean-gm-max", type=float, default=None,
-                     metavar="FLOAT", help="Max mean GM CBF ml/100g/min (default 120)")
+                     metavar="FLOAT", help="Max mean GM map value (strict preset default 120)")
 
     return p
 
