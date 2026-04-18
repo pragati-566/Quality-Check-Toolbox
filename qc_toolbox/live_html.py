@@ -124,13 +124,27 @@ def generate_live_html(results: list[dict], total_subjects: int, output_path: st
         card = f"""
         <div class="card">
             <div class="plots-grid">
-                <div class="main-image-row">
-                    <img src="data:image/png;base64,{b64_slice}" alt="CBF Map">
-                    <img src="data:image/png;base64,{b64_mask}" alt="Mask Overlay">
+                <div class="main-image-row" style="align-items:stretch; gap:1.2rem;">
+                    <div class="plot-wrapper">
+                        <div class="plot-title">CBF Map (Blood Flow Image)</div>
+                        <img src="data:image/png;base64,{b64_slice}" alt="CBF Map">
+                    </div>
+                    <div class="plot-wrapper">
+                        <div class="plot-title">Mask Overlay (Brain Region Outline)</div>
+                        <img src="data:image/png;base64,{b64_mask}" alt="Mask Overlay">
+                    </div>
                 </div>
-                <div class="sub-plots">
-                    <img src="data:image/png;base64,{b64_hist}" alt="CBF Histogram">
-                    <img src="data:image/png;base64,{b64_time}" alt="Timeseries Plot">
+                <div class="sub-plots" style="align-items:stretch; gap:1.2rem;">
+                    <div class="plot-wrapper">
+                        <div class="plot-title">CBF Histogram (Blood Flow Distribution)</div>
+                        <img src="data:image/png;base64,{b64_hist}" alt="CBF Histogram">
+                        <div class="plot-caption">X-axis (Blood Flow Value) | Y-axis (How many voxels have that value)</div>
+                    </div>
+                    <div class="plot-wrapper">
+                        <div class="plot-title">Timeseries Signal Plot (Signal Over Time)</div>
+                        <img src="data:image/png;base64,{b64_time}" alt="Timeseries Plot">
+                        <div class="plot-caption">X-axis (Time Point / Scan Number) | Y-axis (Signal Strength)</div>
+                    </div>
                 </div>
             </div>
             <div class="card-content">
@@ -291,6 +305,39 @@ def generate_live_html(results: list[dict], total_subjects: int, output_path: st
             margin-right: 8px;
         }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+
+        /* ── Plot label styles ── */
+        .plot-wrapper {{
+            display: flex;
+            flex-direction: column;
+            width: 50%;
+            border-right: 1px solid var(--border);
+        }}
+        .plot-wrapper:last-child {{ border-right: none; }}
+        .plot-title {{
+            text-align: center;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            padding: 6px 8px 4px;
+            color: var(--text-main);
+            background: rgba(0,0,0,0.28);
+            border-bottom: 1px solid var(--border);
+        }}
+        .plot-caption {{
+            text-align: center;
+            font-size: 0.70rem;
+            color: var(--text-muted);
+            padding: 3px 6px 5px;
+            background: rgba(0,0,0,0.18);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }}
+        .plot-wrapper img {{
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }}
     </style>
 </head>
 <body>

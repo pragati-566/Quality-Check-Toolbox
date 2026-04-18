@@ -4,7 +4,7 @@ Derive cohort thresholds from qc_results.csv (GMM valley vs IQR fences).
 
 Default metrics: QEI (composite) + spatial CoV (not inside QEI). Optional: --metrics pss di n_gm.
 
-  python scripts/derive_thresholds.py --csv qc_output/qc_results.csv --output qc_output/threshold_analysis
+> python scripts/derive_thresholds.py --csv qc_output/qc_results.csv --output qc_output/threshold_analysis
 """
 
 from __future__ import annotations
